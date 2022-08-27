@@ -1,0 +1,129 @@
+#!/bin/sh
+
+appname="telegramopenwrt"
+left_cut=29
+
+[ -f ${appname}-instalation-files ] || ( find $PWD/src | while read x; do ( [ ! -f $x ] || echo "full$x" | tee -a ${appname}-instalation-files ); done )
+
+_help(){
+    echo "	use './telegramopenwrt' or 'bash telegramopenwrt'";
+    echo;
+    echo "	Availabe command";
+    echo "	=> ./telegramopenwrt install";
+    echo "	=> ./telegramopenwrt install-mini";
+    echo "	=> ./telegramopenwrt config";
+    echo "	=> ./telegramopenwrt run";
+    echo "	=> ./telegramopenwrt restart";
+    echo "	=> ./telegramopenwrt stop";
+    echo "	=> ./telegramopenwrt backup";
+    echo "	=> ./telegramopenwrt remove";
+    echo "	=> ./telegramopenwrt config";
+}
+
+if [ -z $1 ]
+then
+    ( _help )
+elif [ "${1}" == "install" ];
+then
+    while read line;
+    do
+        mode=${line:0:4};
+        file=${line:4:${#line}};
+        dst_dir=$(dirname ${line:$left_cut:${#line}});
+        [ -d $dst_dir ] || mkdir -p $dst_dir;
+        echo "copy file : ${file} $dst_dir";
+        cp ${file} $dst_dir;
+        [[ $dst_dir == "/etc/config" || $dst_dir == "/etc/$appname" ]] || chmod +x $dst_dir/$( basename $line );
+    done < ${appname}-instalation-files
+
+elif [ "${1}" == "install-mini" ];
+then
+    while read line;
+    do
+        mode=${line:0:4};
+        file=${line:4:${#line}};
+        dst_dir=$(dirname ${line:$left_cut:${#line}});
+        [ -d $dst_dir ] || mkdir -p $dst_dir;
+        if [ "${mode}" == "mini" ]''
+        then
+            echo "copy file : ${file} $dst_dir";
+            cp ${file} $dst_dir;
+            [[ $dst_dir == "/etc/config" || $dst_dir == "/etc/$appname" ]] || chmod +x $dst_dir/$( basename $line );
+        fi
+    done < ${appname}-instalation-files
+
+elif [ "${1}" == "config" ];
+then
+    old_token=$(uci get telegramopenwrt.global.key);
+    old_id=$(uci get telegramopenwrt.global.my_chat_id);
+    echo " old token : $old_token";
+    echo " old chat id : $old_id";
+    echo "----------------------------------------------";
+    echo "leave blank for default."
+    read -p " update $appname config (y=Yes) : " up_config;
+	if [ -z $up_config ];then
+		exit 1
+	elif [ $up_config == "y" ]; then
+		read -p " paste telegram token here : " new_token;
+		[ ! -z ${new_token} ] || new_token=$old_token;
+		read -p " paste telegram chat id here : " new_id;
+		[ ! -z $new_id ] || new_id=$old_id;
+		uci set telegramopenwrt.global.key=$new_token;
+		uci set telegramopenwrt.global.my_chat_id=$new_id;
+		echo "----------------------------------------------";
+		echo " ========== config $appname ==========";
+		echo " token : $new_token";
+		echo " chat id : $new_id";
+		echo "----------------------------------------------";
+    fi
+elif [ "${1}" == "run" ];
+then
+
+    ( /etc/init.d/telegram_bot enable );
+	sleep 3
+    ( /etc/init.d/telegram_bot start );
+elif [ "${1}" == "restart" ];
+then
+    ( /etc/init.d/telegram_bot stop );
+	sleep 3
+    ( /etc/init.d/telegram_bot start );
+elif [ "${1}" == "stop" ];
+then
+    ( /etc/init.d/telegram_bot disable );
+	sleep 3
+    ( /etc/init.d/telegram_bot stop );
+elif [ "${1}" == "backup" ];
+then
+	while read line;
+	do
+		file=${line:$left_cut:${#line}};
+		if [ -f $file ];
+		then
+			backup_dir=/root/backup-bot$( dirname $file )
+			[ -d $backup_dir ] || mkdir -p $backup_dir;
+			echo "backup : $file";
+			cp -af $file $backup_dir;
+		fi
+	done < ${appname}-instalation-files
+elif [ "${1}" == "remove" ];
+then
+    read -p " do you want to uninstall telegramopenwrt?. (y): " do_remove;
+    if [ $do_remove == "y" ];
+    then
+	echo "stop and disable $appname";
+        ( /etc/init.d/telegram_bot stop );
+        ( /etc/init.d/telegram_bot disable );
+        while read line;
+        do
+            file=${line:$left_cut:${#line}};
+            if [ -f $file ];
+            then
+                echo "remove $file";
+                rm $file;
+            fi
+        done < ${appname}-instalation-files
+    fi
+else
+    ( _help );
+fi
+
